@@ -14,6 +14,7 @@
       --subtle: #777;
       --field-bg: #f0f0f0;
       --border: #ccc;
+      --hint-bg: #f7f7f7;
     }
 
     [data-theme="dark"] {
@@ -22,6 +23,7 @@
       --subtle: #555;
       --field-bg: #1b1b1b;
       --border: #444;
+      --hint-bg: #1e1e1e;
     }
 
     html, body {
@@ -99,12 +101,28 @@
       margin-top: 0.5em;
     }
 
+    .lock-banner {
+      background: var(--hint-bg);
+      padding: 1em;
+      border: 1px solid var(--border);
+      font-size: 0.9em;
+      margin-bottom: 1em;
+    }
+
     footer {
       margin-top: auto;
       padding-top: 2em;
       font-size: 0.8em;
       text-align: center;
       color: var(--subtle);
+    }
+
+    .guide {
+      margin-top: 2em;
+      text-align: left;
+      font-size: 0.8em;
+      color: var(--subtle);
+      line-height: 1.5;
     }
 
     .theme-toggle {
@@ -137,6 +155,10 @@
 <body>
   <h1>Note: <code id="note-id"></code></h1>
 
+  <div id="lockBanner" class="lock-banner" style="display: none;">
+    This note is locked. Enter password below to unlock.
+  </div>
+
   <textarea id="note" placeholder="Start typing..." disabled></textarea>
 
   <input type="password" id="password" placeholder="Enter password (optional)">
@@ -151,8 +173,17 @@
 
   <footer>
     Stored only in this browser. Private by design.<br>
-    <small>nox v0.15.4</small><br>
+    <small>nox v0.15.5</small><br>
     <button class="theme-toggle" id="themeToggle">Dark</button>
+
+    <div class="guide">
+      <strong>How it works:</strong><br>
+      Create a note at any custom URL — for example:<br>
+      <code>nox.directory/my-thoughts</code><br><br>
+      Your note is stored only in your browser’s local storage.<br>
+      Add a password to encrypt your note. Unlock it anytime on the same device.<br>
+      No accounts, no sync, no cloud.
+    </div>
   </footer>
 
   <script>
@@ -169,6 +200,7 @@
     const encryptBtn = document.getElementById("encryptNow");
     const clearBtn = document.getElementById("clear");
     const status = document.getElementById("status");
+    const lockBanner = document.getElementById("lockBanner");
     const themeToggle = document.getElementById("themeToggle");
     const root = document.documentElement;
 
@@ -265,6 +297,7 @@
         currentState = "decrypted";
         isLocked = false;
         el.removeAttribute("disabled");
+        lockBanner.style.display = "none";
         updateStatus("Decrypted");
       }
     });
@@ -276,6 +309,7 @@
         currentState = "plain";
         isLocked = false;
         el.removeAttribute("disabled");
+        lockBanner.style.display = "none";
         updateStatus("Cleared");
       }
     });
@@ -305,7 +339,8 @@
           currentState = "encrypted";
           isLocked = true;
           el.setAttribute("disabled", true);
-          updateStatus("Locked (Enter password to unlock)");
+          lockBanner.style.display = "block";
+          updateStatus("Locked");
         } else {
           el.value = data;
           currentState = "plain";
