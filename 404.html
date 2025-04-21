@@ -9,28 +9,39 @@
     :root {
       font-family: 'IBM Plex Mono', monospace;
       font-size: 16px;
-      --bg: #fff;
-      --fg: #111;
+      --bg: #ffffff;
+      --fg: #111111;
       --subtle: #777;
       --field-bg: #f0f0f0;
-      --accent: #007aff;
+      --border: #ccc;
     }
 
     [data-theme="dark"] {
       --bg: #0f0f0f;
-      --fg: #eee;
+      --fg: #f0f0f0;
       --subtle: #555;
       --field-bg: #1b1b1b;
+      --border: #444;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: inherit;
+      height: 100%;
+      overflow-x: hidden;
     }
 
     body {
-      margin: 0;
-      padding: 1.5em;
-      background: var(--bg);
-      color: var(--fg);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 2em 1em;
+      box-sizing: border-box;
       max-width: 700px;
-      margin-inline: auto;
-      transition: background 0.2s ease, color 0.2s ease;
+      margin: 0 auto;
     }
 
     h1 {
@@ -45,11 +56,12 @@
       width: 100%;
       font: inherit;
       padding: 1em;
-      border: 1px solid var(--subtle);
+      border: 1px solid var(--border);
       border-radius: 0;
       background: var(--field-bg);
       color: var(--fg);
       margin-bottom: 1em;
+      box-sizing: border-box;
     }
 
     textarea {
@@ -61,12 +73,11 @@
     button {
       font: inherit;
       padding: 0.6em 1.2em;
-      border: 1px solid var(--subtle);
+      border: 1px solid var(--border);
       border-radius: 0;
       background: none;
       color: var(--fg);
       cursor: pointer;
-      transition: background 0.2s ease;
     }
 
     button:hover {
@@ -87,25 +98,30 @@
       text-align: right;
     }
 
-    .theme-toggle {
-      float: right;
-      font-size: 0.85em;
-      margin-bottom: 1em;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      padding: 0.4em 0.8em;
-      cursor: pointer;
-    }
-
     footer {
-      margin-top: 2em;
+      margin-top: auto;
+      padding-top: 2em;
       font-size: 0.8em;
       text-align: center;
       color: var(--subtle);
     }
 
+    .theme-toggle {
+      display: inline-block;
+      margin-top: 1em;
+      font-size: 0.85em;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--fg);
+      padding: 0.4em 1em;
+      cursor: pointer;
+    }
+
     @media (max-width: 500px) {
+      body {
+        padding: 1.5em 1em;
+      }
+
       .controls {
         flex-direction: column;
         align-items: stretch;
@@ -114,17 +130,10 @@
       .status {
         text-align: left;
       }
-
-      .theme-toggle {
-        float: none;
-        margin-bottom: 1em;
-      }
     }
   </style>
 </head>
 <body>
-  <button class="theme-toggle" id="themeToggle">Toggle Mode</button>
-
   <h1>Note: <code id="note-id"></code></h1>
 
   <div class="controls">
@@ -139,7 +148,8 @@
 
   <footer>
     Stored only in this browser. Private by design.<br>
-    <small>nox v0.15.1</small>
+    <small>nox v0.15.2</small><br>
+    <button class="theme-toggle" id="themeToggle">Dark</button>
   </footer>
 
   <script>
@@ -156,11 +166,13 @@
     const encryptBtn = document.getElementById("encryptNow");
     const clearBtn = document.getElementById("clear");
     const status = document.getElementById("status");
+    const themeToggle = document.getElementById("themeToggle");
+    const root = document.documentElement;
 
     let storageKey;
     let currentState = "plain";
-    let saveTimeout;
     let isLocked = false;
+    let saveTimeout;
 
     function updateStatus(text) {
       status.textContent = "Status: " + text;
@@ -210,7 +222,7 @@
     pwd.addEventListener("input", maybeShowEncryptNow);
 
     el.addEventListener("input", () => {
-      if (isLocked) return; // don't allow saving if locked
+      if (isLocked) return;
       maybeShowEncryptNow();
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(async () => {
@@ -265,20 +277,20 @@
       }
     });
 
-    const themeToggle = document.getElementById("themeToggle");
-    const root = document.documentElement;
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "dark") root.setAttribute("data-theme", "dark");
-
     themeToggle.addEventListener("click", () => {
       const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
       root.setAttribute("data-theme", next);
       localStorage.setItem("theme", next);
+      themeToggle.textContent = next === "dark" ? "Light" : "Dark";
     });
 
     (async function init() {
       storageKey = await hashKey("note:" + path);
       const raw = localStorage.getItem(storageKey);
+      const savedTheme = localStorage.getItem("theme") || "light";
+      root.setAttribute("data-theme", savedTheme);
+      themeToggle.textContent = savedTheme === "dark" ? "Light" : "Dark";
+
       if (!raw) {
         el.removeAttribute("disabled");
         updateStatus("Ready");
