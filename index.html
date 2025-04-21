@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Private Note</title>
+  <title>nox</title>
   <style>
     :root {
       font-family: 'Georgia', serif;
@@ -21,8 +21,12 @@
       --field-bg: #1a1a1a;
     }
 
-    * {
-      box-sizing: border-box;
+    [data-stealth="true"] .app {
+      display: none;
+    }
+
+    [data-stealth="true"] .stealth-screen {
+      display: block;
     }
 
     body {
@@ -43,7 +47,7 @@
       word-break: break-all;
     }
 
-    textarea, input {
+    textarea, input, select {
       width: 100%;
       font-family: 'Georgia', serif;
       font-size: 1em;
@@ -105,6 +109,14 @@
       cursor: pointer;
     }
 
+    .stealth-screen {
+      display: none;
+      text-align: center;
+      font-size: 1em;
+      color: var(--subtle);
+      margin-top: 4em;
+    }
+
     @media (max-width: 500px) {
       .controls {
         flex-direction: column;
@@ -127,21 +139,33 @@
 <body>
   <button class="theme-toggle" id="themeToggle">Toggle Dark Mode</button>
 
-  <h1>Note: <code id="note-id"></code></h1>
-
-  <div class="controls">
-    <input type="password" id="password" placeholder="Enter password">
-    <button id="unlock">Unlock Note</button>
-    <button id="encryptNow" style="display:none;">Encrypt Now</button>
-    <button id="clear">Forget Note</button>
-    <span class="status" id="status">Status: Unloaded</span>
+  <div class="stealth-screen" id="stealthScreen">
+    <p>Nothing to see here.</p>
   </div>
 
-  <textarea id="note" placeholder="Start typing..." disabled></textarea>
+  <div class="app" id="app">
+    <h1>Note: <code id="note-id"></code></h1>
+
+    <div class="controls">
+      <input type="password" id="password" placeholder="Enter password">
+      <button id="unlock">Unlock</button>
+      <button id="encryptNow" style="display:none;">Encrypt Now</button>
+      <button id="clear">Forget</button>
+      <select id="selfDestruct">
+        <option value="">No Expiry</option>
+        <option value="5">Self-Destruct: 5 min</option>
+        <option value="60">1 hour</option>
+        <option value="1440">1 day</option>
+      </select>
+      <span class="status" id="status">Status: Unloaded</span>
+    </div>
+
+    <textarea id="note" placeholder="Start typing..." disabled></textarea>
+  </div>
 
   <footer>
-    Saved only in this browser. Encryption optional but recommended.<br>
-    <small>v0.13</small>
+    Stored only in this browser. Optional encryption & stealth.<br>
+    <small>nox v0.14</small>
   </footer>
 
   <script>
@@ -149,36 +173,31 @@
     const label = document.getElementById("note-id");
     label.textContent = path;
 
-    const enc = new TextEncoder();
-    const dec = new TextDecoder();
-
     const el = document.getElementById("note");
     const pwd = document.getElementById("password");
     const unlockBtn = document.getElementById("unlock");
     const encryptBtn = document.getElementById("encryptNow");
     const clearBtn = document.getElementById("clear");
     const status = document.getElementById("status");
+    const destructSelect = document.getElementById("selfDestruct");
+    const stealthScreen = document.getElementById("stealthScreen");
+    const appDiv = document.getElementById("app");
 
-    let storageKey;
-    let currentState = "locked";
+    let storageKey, currentState = "locked", saveTimeout;
+
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
 
     async function hashKey(input) {
-      const msgUint8 = enc.encode(input);
-      const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      const hashBuffer = await crypto.subtle.digest("SHA-256", enc.encode(input));
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
     async function getKey(pass) {
       const salt = enc.encode("static-salt");
       const baseKey = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
       return crypto.subtle.deriveKey(
-        {
-          name: "PBKDF2",
-          salt: salt,
-          iterations: 100000,
-          hash: "SHA-256"
-        },
+        { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
         baseKey,
         { name: "AES-GCM", length: 256 },
         false,
@@ -186,38 +205,36 @@
       );
     }
 
-    async function encryptNote(text, pass) {
+    async function encryptNote(text, pass, expiry) {
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const key = await getKey(pass);
-      const ciphertext = await crypto.subtle.encrypt(
-        { name: "AES-GCM", iv },
-        key,
-        enc.encode(text)
-      );
+      const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(text));
       return JSON.stringify({
         iv: Array.from(iv),
-        encrypted: Array.from(new Uint8Array(ciphertext))
+        encrypted: Array.from(new Uint8Array(ciphertext)),
+        meta: {
+          expiresAt: expiry ? Date.now() + expiry * 60 * 1000 : null
+        }
       });
     }
 
     async function decryptNote(data, pass) {
+      if (data.meta?.expiresAt && Date.now() > data.meta.expiresAt) {
+        localStorage.removeItem(storageKey);
+        alert("This note has self-destructed.");
+        return "";
+      }
       const key = await getKey(pass);
       const iv = new Uint8Array(data.iv);
       const ciphertext = new Uint8Array(data.encrypted);
       try {
-        const plaintext = await crypto.subtle.decrypt(
-          { name: "AES-GCM", iv },
-          key,
-          ciphertext
-        );
+        const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
         return dec.decode(plaintext);
       } catch {
         alert("Wrong password or corrupted data.");
         return "";
       }
     }
-
-    let saveTimeout;
 
     function updateStatus(text) {
       status.textContent = "Status: " + text;
@@ -235,6 +252,9 @@
 
       try {
         const data = JSON.parse(raw);
+        if (data.meta?.stealth) {
+          document.documentElement.setAttribute("data-stealth", "true");
+        }
         if (data.encrypted) {
           currentState = "locked";
           el.value = "";
@@ -255,12 +275,7 @@
     }
 
     function maybeShowEncryptNow() {
-      if (
-        pwd.value &&
-        el.value &&
-        currentState !== "encrypted" &&
-        currentState !== "decrypted"
-      ) {
+      if (pwd.value && el.value && !["encrypted", "decrypted"].includes(currentState)) {
         encryptBtn.style.display = "inline-block";
       } else {
         encryptBtn.style.display = "none";
@@ -270,34 +285,21 @@
     pwd.addEventListener("input", maybeShowEncryptNow);
 
     unlockBtn.addEventListener("click", async () => {
-      const pass = pwd.value;
-      if (!pass) return alert("Enter a password first.");
       const raw = localStorage.getItem(storageKey);
-      if (!raw) return;
-
+      if (!pwd.value || !raw) return;
       const data = JSON.parse(raw);
-      if (!data.encrypted) {
-        el.value = data;
-        el.disabled = false;
-        currentState = "plain";
-        updateStatus("Unencrypted");
-        return;
-      }
-
-      const decrypted = await decryptNote(data, pass);
+      const decrypted = await decryptNote(data, pwd.value);
       if (decrypted) {
         el.value = decrypted;
         el.disabled = false;
         currentState = "decrypted";
         updateStatus("Decrypted");
+        document.documentElement.removeAttribute("data-stealth");
       }
     });
 
     encryptBtn.addEventListener("click", async () => {
-      const text = el.value;
-      const pass = pwd.value;
-      if (!pass) return alert("Enter a password first.");
-      const encrypted = await encryptNote(text, pass);
+      const encrypted = await encryptNote(el.value, pwd.value, parseInt(destructSelect.value));
       localStorage.setItem(storageKey, encrypted);
       currentState = "encrypted";
       updateStatus("Encrypted");
@@ -310,8 +312,9 @@
       saveTimeout = setTimeout(async () => {
         const text = el.value;
         const pass = pwd.value;
-        if (pass && (currentState === "decrypted" || currentState === "encrypted")) {
-          const encrypted = await encryptNote(text, pass);
+        const expiry = parseInt(destructSelect.value);
+        if (pass && ["decrypted", "encrypted"].includes(currentState)) {
+          const encrypted = await encryptNote(text, pass, expiry);
           localStorage.setItem(storageKey, encrypted);
           currentState = "encrypted";
           updateStatus("Encrypted");
@@ -324,7 +327,7 @@
     });
 
     clearBtn.addEventListener("click", () => {
-      if (confirm("Forget this note? This cannot be undone.")) {
+      if (confirm("Forget this note?")) {
         localStorage.removeItem(storageKey);
         el.value = "";
         el.disabled = false;
@@ -334,18 +337,14 @@
       }
     });
 
-    // DARK MODE TOGGLE
+    // Dark Mode Toggle
     const themeToggle = document.getElementById("themeToggle");
     const root = document.documentElement;
     const savedTheme = localStorage.getItem("theme");
-
-    if (savedTheme === "dark") {
-      root.setAttribute("data-theme", "dark");
-    }
+    if (savedTheme === "dark") root.setAttribute("data-theme", "dark");
 
     themeToggle.addEventListener("click", () => {
-      const current = root.getAttribute("data-theme");
-      const next = current === "dark" ? "light" : "dark";
+      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
       root.setAttribute("data-theme", next);
       localStorage.setItem("theme", next);
     });
