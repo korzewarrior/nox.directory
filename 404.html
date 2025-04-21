@@ -4,49 +4,49 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>nox</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&display=swap" rel="stylesheet">
   <style>
     :root {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-      font-size: 18px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 16px;
       --bg: #fff;
       --fg: #111;
-      --subtle: #888;
-      --field-bg: #f9f9f9;
+      --subtle: #777;
+      --field-bg: #f0f0f0;
       --accent: #007aff;
     }
 
     [data-theme="dark"] {
-      --bg: #0e0e0e;
-      --fg: #fafafa;
-      --subtle: #666;
-      --field-bg: #1a1a1a;
+      --bg: #0f0f0f;
+      --fg: #eee;
+      --subtle: #555;
+      --field-bg: #1b1b1b;
     }
 
     body {
       margin: 0;
-      padding: 2em 1em 4em;
+      padding: 1.5em;
       background: var(--bg);
       color: var(--fg);
-      transition: background 0.3s ease, color 0.3s ease;
-      max-width: 800px;
+      max-width: 700px;
       margin-inline: auto;
+      transition: background 0.2s ease, color 0.2s ease;
     }
 
     h1 {
       font-size: 1em;
-      font-weight: 500;
+      font-weight: normal;
       color: var(--subtle);
       margin-bottom: 1em;
-      word-break: break-all;
+      word-break: break-word;
     }
 
     textarea, input {
       width: 100%;
       font: inherit;
-      font-size: 1em;
       padding: 1em;
       border: 1px solid var(--subtle);
-      border-radius: 8px;
+      border-radius: 0;
       background: var(--field-bg);
       color: var(--fg);
       margin-bottom: 1em;
@@ -58,27 +58,26 @@
       line-height: 1.5;
     }
 
+    button {
+      font: inherit;
+      padding: 0.6em 1.2em;
+      border: 1px solid var(--subtle);
+      border-radius: 0;
+      background: none;
+      color: var(--fg);
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    button:hover {
+      background: var(--field-bg);
+    }
+
     .controls {
       display: flex;
       flex-wrap: wrap;
       gap: 0.5em;
       align-items: center;
-    }
-
-    button {
-      font: inherit;
-      padding: 0.5em 1em;
-      border: none;
-      border-radius: 6px;
-      background: var(--field-bg);
-      color: var(--fg);
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    button:hover {
-      background: var(--accent);
-      color: white;
     }
 
     .status {
@@ -88,22 +87,22 @@
       text-align: right;
     }
 
+    .theme-toggle {
+      float: right;
+      font-size: 0.85em;
+      margin-bottom: 1em;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.4em 0.8em;
+      cursor: pointer;
+    }
+
     footer {
       margin-top: 2em;
       font-size: 0.8em;
-      color: var(--subtle);
       text-align: center;
-    }
-
-    .theme-toggle {
-      position: fixed;
-      top: 1em;
-      right: 1em;
-      font-size: 0.9em;
-      background: none;
-      border: none;
       color: var(--subtle);
-      cursor: pointer;
     }
 
     @media (max-width: 500px) {
@@ -117,10 +116,8 @@
       }
 
       .theme-toggle {
-        position: static;
-        display: block;
+        float: none;
         margin-bottom: 1em;
-        text-align: right;
       }
     }
   </style>
@@ -138,11 +135,11 @@
     <span class="status" id="status">Status: Ready</span>
   </div>
 
-  <textarea id="note" placeholder="Start typing..."></textarea>
+  <textarea id="note" placeholder="Start typing..." disabled></textarea>
 
   <footer>
     Stored only in this browser. Private by design.<br>
-    <small>nox v0.15</small>
+    <small>nox v0.15.1</small>
   </footer>
 
   <script>
@@ -163,6 +160,7 @@
     let storageKey;
     let currentState = "plain";
     let saveTimeout;
+    let isLocked = false;
 
     function updateStatus(text) {
       status.textContent = "Status: " + text;
@@ -212,6 +210,7 @@
     pwd.addEventListener("input", maybeShowEncryptNow);
 
     el.addEventListener("input", () => {
+      if (isLocked) return; // don't allow saving if locked
       maybeShowEncryptNow();
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(async () => {
@@ -249,6 +248,8 @@
       if (decrypted) {
         el.value = decrypted;
         currentState = "decrypted";
+        isLocked = false;
+        el.removeAttribute("disabled");
         updateStatus("Decrypted");
       }
     });
@@ -258,6 +259,8 @@
         localStorage.removeItem(storageKey);
         el.value = "";
         currentState = "plain";
+        isLocked = false;
+        el.removeAttribute("disabled");
         updateStatus("Cleared");
       }
     });
@@ -276,19 +279,27 @@
     (async function init() {
       storageKey = await hashKey("note:" + path);
       const raw = localStorage.getItem(storageKey);
-      if (!raw) return updateStatus("Ready");
+      if (!raw) {
+        el.removeAttribute("disabled");
+        updateStatus("Ready");
+        return;
+      }
       try {
         const data = JSON.parse(raw);
         if (data.encrypted) {
           currentState = "encrypted";
+          isLocked = true;
+          el.setAttribute("disabled", true);
           updateStatus("Locked (Enter password to unlock)");
         } else {
           el.value = data;
           currentState = "plain";
+          el.removeAttribute("disabled");
           updateStatus("Loaded");
         }
       } catch {
         el.value = raw;
+        el.removeAttribute("disabled");
         updateStatus("Loaded");
       }
     })();
