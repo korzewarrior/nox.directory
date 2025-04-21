@@ -7,9 +7,18 @@
   <style>
     :root {
       font-family: 'Georgia', serif;
-      background: #fefefe;
-      color: #111;
       font-size: 18px;
+      --bg: #fefefe;
+      --fg: #111;
+      --subtle: #999;
+      --field-bg: #fff;
+    }
+
+    [data-theme="dark"] {
+      --bg: #111;
+      --fg: #fefefe;
+      --subtle: #666;
+      --field-bg: #1a1a1a;
     }
 
     body {
@@ -17,12 +26,15 @@
       padding: 3em 1em;
       max-width: 700px;
       margin-inline: auto;
+      background: var(--bg);
+      color: var(--fg);
+      transition: background 0.3s ease, color 0.3s ease;
     }
 
     h1 {
       font-size: 1.2em;
       font-weight: normal;
-      color: #888;
+      color: var(--subtle);
       margin-bottom: 1em;
     }
 
@@ -33,7 +45,8 @@
       padding: 1em;
       border: none;
       outline: none;
-      background: #fff;
+      background: var(--field-bg);
+      color: var(--fg);
       box-shadow: 0 0 2px rgba(0,0,0,0.05);
       margin-bottom: 1em;
     }
@@ -46,8 +59,9 @@
 
     .controls {
       display: flex;
-      justify-content: space-between;
-      gap: 1em;
+      flex-wrap: wrap;
+      gap: 0.5em;
+      align-items: center;
     }
 
     button {
@@ -55,30 +69,54 @@
       font-size: 0.9em;
       padding: 0.5em 1em;
       border: none;
-      background: #f2f2f2;
+      background: var(--field-bg);
+      color: var(--fg);
       cursor: pointer;
+      box-shadow: 0 0 2px rgba(0,0,0,0.05);
+    }
+
+    .status {
+      flex-grow: 1;
+      font-size: 0.85em;
+      color: var(--subtle);
+      text-align: right;
     }
 
     footer {
       margin-top: 1.5em;
       font-size: 0.85em;
-      color: #999;
+      color: var(--subtle);
       text-align: center;
+    }
+
+    .theme-toggle {
+      position: fixed;
+      top: 1em;
+      right: 1em;
+      font-size: 0.9em;
+      background: none;
+      border: none;
+      color: var(--subtle);
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
+  <button class="theme-toggle" id="themeToggle">Toggle Dark Mode</button>
+
   <h1>Note: <code id="note-id"></code></h1>
 
-  <input type="password" id="password" placeholder="Optional password to encrypt/decrypt">
-  <textarea id="note" placeholder="Start typing..."></textarea>
-
   <div class="controls">
-    <button id="clear">Forget this note</button>
-    <span id="status" style="color:#aaa; font-size:0.9em; margin:auto 0;"></span>
+    <input type="password" id="password" placeholder="Enter password">
+    <button id="unlock">Unlock Note</button>
+    <button id="encryptNow" style="display:none;">Encrypt Now</button>
+    <button id="clear">Forget Note</button>
+    <span class="status" id="status">Status: Unloaded</span>
   </div>
 
-  <footer>Saved only in this browser. Encryption optional. Nothing leaves this device.</footer>
+  <textarea id="note" placeholder="Start typing..." disabled></textarea>
+
+  <footer>Saved only in this browser. Your secrets stay on your device. Encryption optional but recommended.</footer>
 
   <script>
     const path = window.location.pathname;
@@ -90,8 +128,13 @@
 
     const el = document.getElementById("note");
     const pwd = document.getElementById("password");
-    const status = document.getElementById("status");
+    const unlockBtn = document.getElementById("unlock");
+    const encryptBtn = document.getElementById("encryptNow");
     const clearBtn = document.getElementById("clear");
+    const status = document.getElementById("status");
+
+    let storageKey;
+    let currentState = "locked";
 
     async function hashKey(input) {
       const msgUint8 = enc.encode(input);
@@ -149,61 +192,126 @@
     }
 
     let saveTimeout;
-    let storageKey;
 
-    async function init() {
+    function updateStatus(text) {
+      status.textContent = "Status: " + text;
+    }
+
+    async function loadNote() {
       storageKey = await hashKey("note:" + path);
       const raw = localStorage.getItem(storageKey);
-      if (!raw) return;
+      if (!raw) {
+        currentState = "new";
+        el.disabled = false;
+        updateStatus("Unencrypted");
+        return;
+      }
 
       try {
         const data = JSON.parse(raw);
         if (data.encrypted) {
-          el.placeholder = "Enter password to decrypt...";
+          currentState = "locked";
+          el.value = "";
           el.disabled = true;
-
-          pwd.addEventListener("input", async () => {
-            const decrypted = await decryptNote(data, pwd.value);
-            if (decrypted) {
-              el.value = decrypted;
-              el.disabled = false;
-              el.focus();
-            }
-          });
+          updateStatus("Locked (requires password)");
         } else {
+          currentState = "plain";
           el.value = data;
+          el.disabled = false;
+          updateStatus("Unencrypted");
         }
       } catch {
         el.value = raw;
+        currentState = "plain";
+        el.disabled = false;
+        updateStatus("Unencrypted");
       }
     }
 
-    function scheduleSave() {
+    unlockBtn.addEventListener("click", async () => {
+      const pass = pwd.value;
+      if (!pass) return alert("Enter a password first.");
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+
+      const data = JSON.parse(raw);
+      if (!data.encrypted) {
+        el.value = data;
+        el.disabled = false;
+        currentState = "plain";
+        updateStatus("Unencrypted");
+        return;
+      }
+
+      const decrypted = await decryptNote(data, pass);
+      if (decrypted) {
+        el.value = decrypted;
+        el.disabled = false;
+        currentState = "decrypted";
+        updateStatus("Decrypted");
+      }
+    });
+
+    encryptBtn.addEventListener("click", async () => {
+      const text = el.value;
+      const pass = pwd.value;
+      if (!pass) return alert("Enter a password first.");
+      const encrypted = await encryptNote(text, pass);
+      localStorage.setItem(storageKey, encrypted);
+      currentState = "encrypted";
+      updateStatus("Encrypted");
+      encryptBtn.style.display = "none";
+    });
+
+    el.addEventListener("input", () => {
+      if (pwd.value && currentState !== "encrypted" && currentState !== "decrypted") {
+        encryptBtn.style.display = "inline-block";
+      }
       clearTimeout(saveTimeout);
-      status.textContent = "Saving...";
       saveTimeout = setTimeout(async () => {
         const text = el.value;
         const pass = pwd.value;
-        if (pass) {
+        if (pass && (currentState === "decrypted" || currentState === "encrypted")) {
           const encrypted = await encryptNote(text, pass);
           localStorage.setItem(storageKey, encrypted);
+          currentState = "encrypted";
+          updateStatus("Encrypted");
         } else {
           localStorage.setItem(storageKey, text);
+          currentState = "plain";
+          updateStatus("Unencrypted");
         }
-        status.textContent = "Saved.";
       }, 500);
-    }
+    });
 
-    el.addEventListener("input", scheduleSave);
     clearBtn.addEventListener("click", () => {
       if (confirm("Forget this note? This cannot be undone.")) {
         localStorage.removeItem(storageKey);
         el.value = "";
-        status.textContent = "Note deleted.";
+        el.disabled = false;
+        pwd.value = "";
+        currentState = "new";
+        updateStatus("Deleted");
       }
     });
 
-    init();
+    // DARK MODE TOGGLE
+    const themeToggle = document.getElementById("themeToggle");
+    const root = document.documentElement;
+    const savedTheme = localStorage.getItem("theme");
+
+    if (savedTheme === "dark") {
+      root.setAttribute("data-theme", "dark");
+    }
+
+    themeToggle.addEventListener("click", () => {
+      const current = root.getAttribute("data-theme");
+      const next = current === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      localStorage.setItem("theme", next);
+    });
+
+    loadNote();
   </script>
 </body>
 </html>
