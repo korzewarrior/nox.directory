@@ -21,14 +21,6 @@
       --field-bg: #1a1a1a;
     }
 
-    [data-stealth="true"] .app {
-      display: none;
-    }
-
-    [data-stealth="true"] .stealth-screen {
-      display: block;
-    }
-
     body {
       margin: 0;
       padding: 2em 1em 4em;
@@ -47,7 +39,7 @@
       word-break: break-all;
     }
 
-    textarea, input, select {
+    textarea, input {
       width: 100%;
       font-family: 'Georgia', serif;
       font-size: 1em;
@@ -109,14 +101,6 @@
       cursor: pointer;
     }
 
-    .stealth-screen {
-      display: none;
-      text-align: center;
-      font-size: 1em;
-      color: var(--subtle);
-      margin-top: 4em;
-    }
-
     @media (max-width: 500px) {
       .controls {
         flex-direction: column;
@@ -139,33 +123,21 @@
 <body>
   <button class="theme-toggle" id="themeToggle">Toggle Dark Mode</button>
 
-  <div class="stealth-screen" id="stealthScreen">
-    <p>Nothing to see here.</p>
+  <h1>Note: <code id="note-id"></code></h1>
+
+  <div class="controls">
+    <input type="password" id="password" placeholder="Enter password (optional)">
+    <button id="unlock">Unlock</button>
+    <button id="encryptNow" style="display:none;">Encrypt Now</button>
+    <button id="clear">Forget</button>
+    <span class="status" id="status">Status: Ready</span>
   </div>
 
-  <div class="app" id="app">
-    <h1>Note: <code id="note-id"></code></h1>
-
-    <div class="controls">
-      <input type="password" id="password" placeholder="Enter password">
-      <button id="unlock">Unlock</button>
-      <button id="encryptNow" style="display:none;">Encrypt Now</button>
-      <button id="clear">Forget</button>
-      <select id="selfDestruct">
-        <option value="">No Expiry</option>
-        <option value="5">Self-Destruct: 5 min</option>
-        <option value="60">1 hour</option>
-        <option value="1440">1 day</option>
-      </select>
-      <span class="status" id="status">Status: Unloaded</span>
-    </div>
-
-    <textarea id="note" placeholder="Start typing..." disabled></textarea>
-  </div>
+  <textarea id="note" placeholder="Start typing..."></textarea>
 
   <footer>
-    Stored only in this browser. Optional encryption & stealth.<br>
-    <small>nox v0.14</small>
+    Stored only in this browser. Private by design.<br>
+    <small>nox v0.14.1</small>
   </footer>
 
   <script>
@@ -173,20 +145,19 @@
     const label = document.getElementById("note-id");
     label.textContent = path;
 
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+
     const el = document.getElementById("note");
     const pwd = document.getElementById("password");
     const unlockBtn = document.getElementById("unlock");
     const encryptBtn = document.getElementById("encryptNow");
     const clearBtn = document.getElementById("clear");
     const status = document.getElementById("status");
-    const destructSelect = document.getElementById("selfDestruct");
-    const stealthScreen = document.getElementById("stealthScreen");
-    const appDiv = document.getElementById("app");
 
-    let storageKey, currentState = "locked", saveTimeout;
-
-    const enc = new TextEncoder();
-    const dec = new TextDecoder();
+    let storageKey;
+    let currentState = "plain";
+    let saveTimeout;
 
     async function hashKey(input) {
       const hashBuffer = await crypto.subtle.digest("SHA-256", enc.encode(input));
@@ -205,25 +176,14 @@
       );
     }
 
-    async function encryptNote(text, pass, expiry) {
+    async function encryptNote(text, pass) {
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const key = await getKey(pass);
       const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(text));
-      return JSON.stringify({
-        iv: Array.from(iv),
-        encrypted: Array.from(new Uint8Array(ciphertext)),
-        meta: {
-          expiresAt: expiry ? Date.now() + expiry * 60 * 1000 : null
-        }
-      });
+      return JSON.stringify({ iv: Array.from(iv), encrypted: Array.from(new Uint8Array(ciphertext)) });
     }
 
     async function decryptNote(data, pass) {
-      if (data.meta?.expiresAt && Date.now() > data.meta.expiresAt) {
-        localStorage.removeItem(storageKey);
-        alert("This note has self-destructed.");
-        return "";
-      }
       const key = await getKey(pass);
       const iv = new Uint8Array(data.iv);
       const ciphertext = new Uint8Array(data.encrypted);
@@ -240,42 +200,8 @@
       status.textContent = "Status: " + text;
     }
 
-    async function loadNote() {
-      storageKey = await hashKey("note:" + path);
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) {
-        currentState = "new";
-        el.disabled = false;
-        updateStatus("Unencrypted");
-        return;
-      }
-
-      try {
-        const data = JSON.parse(raw);
-        if (data.meta?.stealth) {
-          document.documentElement.setAttribute("data-stealth", "true");
-        }
-        if (data.encrypted) {
-          currentState = "locked";
-          el.value = "";
-          el.disabled = true;
-          updateStatus("Locked (requires password)");
-        } else {
-          el.value = data;
-          currentState = "plain";
-          el.disabled = false;
-          updateStatus("Unencrypted");
-        }
-      } catch {
-        el.value = raw;
-        currentState = "plain";
-        el.disabled = false;
-        updateStatus("Unencrypted");
-      }
-    }
-
     function maybeShowEncryptNow() {
-      if (pwd.value && el.value && !["encrypted", "decrypted"].includes(currentState)) {
+      if (pwd.value && el.value && currentState === "plain") {
         encryptBtn.style.display = "inline-block";
       } else {
         encryptBtn.style.display = "none";
@@ -284,60 +210,57 @@
 
     pwd.addEventListener("input", maybeShowEncryptNow);
 
-    unlockBtn.addEventListener("click", async () => {
-      const raw = localStorage.getItem(storageKey);
-      if (!pwd.value || !raw) return;
-      const data = JSON.parse(raw);
-      const decrypted = await decryptNote(data, pwd.value);
-      if (decrypted) {
-        el.value = decrypted;
-        el.disabled = false;
-        currentState = "decrypted";
-        updateStatus("Decrypted");
-        document.documentElement.removeAttribute("data-stealth");
-      }
-    });
-
-    encryptBtn.addEventListener("click", async () => {
-      const encrypted = await encryptNote(el.value, pwd.value, parseInt(destructSelect.value));
-      localStorage.setItem(storageKey, encrypted);
-      currentState = "encrypted";
-      updateStatus("Encrypted");
-      encryptBtn.style.display = "none";
-    });
-
     el.addEventListener("input", () => {
       maybeShowEncryptNow();
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(async () => {
         const text = el.value;
         const pass = pwd.value;
-        const expiry = parseInt(destructSelect.value);
-        if (pass && ["decrypted", "encrypted"].includes(currentState)) {
-          const encrypted = await encryptNote(text, pass, expiry);
+        if (pass && currentState !== "encrypted") {
+          const encrypted = await encryptNote(text, pass);
           localStorage.setItem(storageKey, encrypted);
           currentState = "encrypted";
           updateStatus("Encrypted");
         } else {
           localStorage.setItem(storageKey, text);
           currentState = "plain";
-          updateStatus("Unencrypted");
+          updateStatus("Saved");
         }
       }, 500);
+    });
+
+    encryptBtn.addEventListener("click", async () => {
+      const text = el.value;
+      const pass = pwd.value;
+      const encrypted = await encryptNote(text, pass);
+      localStorage.setItem(storageKey, encrypted);
+      currentState = "encrypted";
+      updateStatus("Encrypted");
+      encryptBtn.style.display = "none";
+    });
+
+    unlockBtn.addEventListener("click", async () => {
+      const raw = localStorage.getItem(storageKey);
+      if (!pwd.value || !raw) return;
+      const data = JSON.parse(raw);
+      if (!data.encrypted) return;
+      const decrypted = await decryptNote(data, pwd.value);
+      if (decrypted) {
+        el.value = decrypted;
+        currentState = "decrypted";
+        updateStatus("Decrypted");
+      }
     });
 
     clearBtn.addEventListener("click", () => {
       if (confirm("Forget this note?")) {
         localStorage.removeItem(storageKey);
         el.value = "";
-        el.disabled = false;
-        pwd.value = "";
-        currentState = "new";
-        updateStatus("Deleted");
+        currentState = "plain";
+        updateStatus("Cleared");
       }
     });
 
-    // Dark Mode Toggle
     const themeToggle = document.getElementById("themeToggle");
     const root = document.documentElement;
     const savedTheme = localStorage.getItem("theme");
@@ -349,7 +272,28 @@
       localStorage.setItem("theme", next);
     });
 
-    loadNote();
+    (async function init() {
+      storageKey = await hashKey("note:" + path);
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) {
+        updateStatus("Ready");
+        return;
+      }
+      try {
+        const data = JSON.parse(raw);
+        if (data.encrypted) {
+          currentState = "encrypted";
+          updateStatus("Locked (Enter password to unlock)");
+        } else {
+          el.value = data;
+          currentState = "plain";
+          updateStatus("Loaded");
+        }
+      } catch {
+        el.value = raw;
+        updateStatus("Loaded");
+      }
+    })();
   </script>
 </body>
 </html>
