@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Private Notes</title>
+  <style>
+    :root {
+      font-family: 'Georgia', serif;
+      background: #fefefe;
+      color: #111;
+      font-size: 18px;
+    }
+
+    body {
+      margin: 0;
+      padding: 3em 1em;
+      max-width: 700px;
+      margin-inline: auto;
+    }
+
+    h1 {
+      font-size: 1.2em;
+      font-weight: normal;
+      color: #888;
+      margin-bottom: 1em;
+    }
+
+    textarea, input {
+      width: 100%;
+      font-family: 'Georgia', serif;
+      font-size: 1em;
+      padding: 1em;
+      border: none;
+      outline: none;
+      background: #fff;
+      box-shadow: 0 0 2px rgba(0,0,0,0.05);
+      margin-bottom: 1em;
+    }
+
+    textarea {
+      height: 60vh;
+      resize: none;
+      line-height: 1.5;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      gap: 1em;
+    }
+
+    button {
+      font-family: 'Georgia', serif;
+      font-size: 0.9em;
+      padding: 0.5em 1em;
+      border: none;
+      background: #f2f2f2;
+      cursor: pointer;
+    }
+
+    footer {
+      margin-top: 1.5em;
+      font-size: 0.85em;
+      color: #999;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Note: <code id="note-id"></code></h1>
+
+  <input type="password" id="password" placeholder="Optional password to encrypt/decrypt">
+  <textarea id="note" placeholder="Start typing..."></textarea>
+
+  <div class="controls">
+    <button id="clear">Forget this note</button>
+    <span id="status" style="color:#aaa; font-size:0.9em; margin:auto 0;"></span>
+  </div>
+
+  <footer>Saved only in this browser. Encryption optional. Nothing leaves this device.</footer>
+
+  <script>
+    const path = window.location.pathname;
+    const label = document.getElementById("note-id");
+    label.textContent = path;
+
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+
+    const el = document.getElementById("note");
+    const pwd = document.getElementById("password");
+    const status = document.getElementById("status");
+    const clearBtn = document.getElementById("clear");
+
+    async function hashKey(input) {
+      const msgUint8 = enc.encode(input);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function getKey(pass) {
+      const salt = enc.encode("static-salt");
+      const baseKey = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
+      return crypto.subtle.deriveKey(
+        {
+          name: "PBKDF2",
+          salt: salt,
+          iterations: 100000,
+          hash: "SHA-256"
+        },
+        baseKey,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+    }
+
+    async function encryptNote(text, pass) {
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const key = await getKey(pass);
+      const ciphertext = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        key,
+        enc.encode(text)
+      );
+      return JSON.stringify({
+        iv: Array.from(iv),
+        encrypted: Array.from(new Uint8Array(ciphertext))
+      });
+    }
+
+    async function decryptNote(data, pass) {
+      const key = await getKey(pass);
+      const iv = new Uint8Array(data.iv);
+      const ciphertext = new Uint8Array(data.encrypted);
+      try {
+        const plaintext = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv },
+          key,
+          ciphertext
+        );
+        return dec.decode(plaintext);
+      } catch {
+        alert("Wrong password or corrupted data.");
+        return "";
+      }
+    }
+
+    let saveTimeout;
+    let storageKey;
+
+    async function init() {
+      storageKey = await hashKey("note:" + path);
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+
+      try {
+        const data = JSON.parse(raw);
+        if (data.encrypted) {
+          el.placeholder = "Enter password to decrypt...";
+          el.disabled = true;
+
+          pwd.addEventListener("input", async () => {
+            const decrypted = await decryptNote(data, pwd.value);
+            if (decrypted) {
+              el.value = decrypted;
+              el.disabled = false;
+              el.focus();
+            }
+          });
+        } else {
+          el.value = data;
+        }
+      } catch {
+        el.value = raw;
+      }
+    }
+
+    function scheduleSave() {
+      clearTimeout(saveTimeout);
+      status.textContent = "Saving...";
+      saveTimeout = setTimeout(async () => {
+        const text = el.value;
+        const pass = pwd.value;
+        if (pass) {
+          const encrypted = await encryptNote(text, pass);
+          localStorage.setItem(storageKey, encrypted);
+        } else {
+          localStorage.setItem(storageKey, text);
+        }
+        status.textContent = "Saved.";
+      }, 500);
+    }
+
+    el.addEventListener("input", scheduleSave);
+    clearBtn.addEventListener("click", () => {
+      if (confirm("Forget this note? This cannot be undone.")) {
+        localStorage.removeItem(storageKey);
+        el.value = "";
+        status.textContent = "Note deleted.";
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>
