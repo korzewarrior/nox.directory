@@ -52,7 +52,7 @@
       word-break: break-word;
     }
 
-    textarea, input {
+    textarea, input[type="password"] {
       width: 100%;
       font: inherit;
       padding: 1em;
@@ -89,13 +89,14 @@
       flex-wrap: wrap;
       gap: 0.5em;
       align-items: center;
+      margin-bottom: 1em;
     }
 
     .status {
       font-size: 0.85em;
       color: var(--subtle);
-      margin-bottom: 1em;
       text-align: right;
+      margin-top: 0.5em;
     }
 
     footer {
@@ -135,20 +136,22 @@
 </head>
 <body>
   <h1>Note: <code id="note-id"></code></h1>
-  <div class="status" id="status">Status: Ready</div>
 
   <textarea id="note" placeholder="Start typing..." disabled></textarea>
 
+  <input type="password" id="password" placeholder="Enter password (optional)">
+
   <div class="controls">
-    <input type="password" id="password" placeholder="Enter password (optional)">
     <button id="unlock">Unlock</button>
     <button id="encryptNow" style="display:none;">Encrypt Now</button>
     <button id="clear">Forget</button>
   </div>
 
+  <div class="status" id="status">Status: Ready</div>
+
   <footer>
     Stored only in this browser. Private by design.<br>
-    <small>nox v0.15.3</small><br>
+    <small>nox v0.15.4</small><br>
     <button class="theme-toggle" id="themeToggle">Dark</button>
   </footer>
 
