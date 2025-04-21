@@ -6,17 +6,18 @@
   <title>nox</title>
   <style>
     :root {
-      font-family: 'Georgia', serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       font-size: 18px;
-      --bg: #fefefe;
+      --bg: #fff;
       --fg: #111;
       --subtle: #888;
-      --field-bg: #fff;
+      --field-bg: #f9f9f9;
+      --accent: #007aff;
     }
 
     [data-theme="dark"] {
-      --bg: #111;
-      --fg: #fefefe;
+      --bg: #0e0e0e;
+      --fg: #fafafa;
       --subtle: #666;
       --field-bg: #1a1a1a;
     }
@@ -33,7 +34,7 @@
 
     h1 {
       font-size: 1em;
-      font-weight: normal;
+      font-weight: 500;
       color: var(--subtle);
       margin-bottom: 1em;
       word-break: break-all;
@@ -41,14 +42,13 @@
 
     textarea, input {
       width: 100%;
-      font-family: 'Georgia', serif;
+      font: inherit;
       font-size: 1em;
       padding: 1em;
-      border: none;
-      outline: none;
+      border: 1px solid var(--subtle);
+      border-radius: 8px;
       background: var(--field-bg);
       color: var(--fg);
-      box-shadow: 0 0 2px rgba(0,0,0,0.05);
       margin-bottom: 1em;
     }
 
@@ -66,14 +66,19 @@
     }
 
     button {
-      font-family: 'Georgia', serif;
-      font-size: 0.9em;
+      font: inherit;
       padding: 0.5em 1em;
       border: none;
+      border-radius: 6px;
       background: var(--field-bg);
       color: var(--fg);
       cursor: pointer;
-      box-shadow: 0 0 2px rgba(0,0,0,0.05);
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: var(--accent);
+      color: white;
     }
 
     .status {
@@ -121,7 +126,7 @@
   </style>
 </head>
 <body>
-  <button class="theme-toggle" id="themeToggle">Toggle Dark Mode</button>
+  <button class="theme-toggle" id="themeToggle">Toggle Mode</button>
 
   <h1>Note: <code id="note-id"></code></h1>
 
@@ -137,7 +142,7 @@
 
   <footer>
     Stored only in this browser. Private by design.<br>
-    <small>nox v0.14.1</small>
+    <small>nox v0.15</small>
   </footer>
 
   <script>
@@ -158,6 +163,14 @@
     let storageKey;
     let currentState = "plain";
     let saveTimeout;
+
+    function updateStatus(text) {
+      status.textContent = "Status: " + text;
+    }
+
+    function maybeShowEncryptNow() {
+      encryptBtn.style.display = (pwd.value && el.value && currentState === "plain") ? "inline-block" : "none";
+    }
 
     async function hashKey(input) {
       const hashBuffer = await crypto.subtle.digest("SHA-256", enc.encode(input));
@@ -184,27 +197,15 @@
     }
 
     async function decryptNote(data, pass) {
-      const key = await getKey(pass);
-      const iv = new Uint8Array(data.iv);
-      const ciphertext = new Uint8Array(data.encrypted);
       try {
+        const key = await getKey(pass);
+        const iv = new Uint8Array(data.iv);
+        const ciphertext = new Uint8Array(data.encrypted);
         const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
         return dec.decode(plaintext);
       } catch {
         alert("Wrong password or corrupted data.");
         return "";
-      }
-    }
-
-    function updateStatus(text) {
-      status.textContent = "Status: " + text;
-    }
-
-    function maybeShowEncryptNow() {
-      if (pwd.value && el.value && currentState === "plain") {
-        encryptBtn.style.display = "inline-block";
-      } else {
-        encryptBtn.style.display = "none";
       }
     }
 
@@ -275,10 +276,7 @@
     (async function init() {
       storageKey = await hashKey("note:" + path);
       const raw = localStorage.getItem(storageKey);
-      if (!raw) {
-        updateStatus("Ready");
-        return;
-      }
+      if (!raw) return updateStatus("Ready");
       try {
         const data = JSON.parse(raw);
         if (data.encrypted) {
