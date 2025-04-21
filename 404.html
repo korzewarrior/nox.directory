@@ -170,6 +170,7 @@
     <div class="utility-bar">
       <div>
         <button id="unlock">Unlock</button>
+        <button id="lock">Lock</button>
         <button id="clear">Forget</button>
       </div>
       <button class="theme-toggle" id="themeToggle">Dark</button>
@@ -183,7 +184,7 @@
       Add a password to encrypt. Unlock later on the same device.
     </div>
 
-    <div class="footer-tag">nox v0.15.9 — private by design</div>
+    <div class="footer-tag">nox v0.16.1 — private by design</div>
   </footer>
 
   <script>
@@ -197,7 +198,7 @@
     const el = document.getElementById("note");
     const pwd = document.getElementById("password");
     const unlockBtn = document.getElementById("unlock");
-    const encryptBtn = document.getElementById("encryptNow");
+    const lockBtn = document.getElementById("lock");
     const clearBtn = document.getElementById("clear");
     const status = document.getElementById("status");
     const lockBanner = document.getElementById("lockBanner");
@@ -207,15 +208,9 @@
     let storageKey;
     let currentState = "plain";
     let isLocked = false;
-    let saveTimeout;
 
     function updateStatus(text) {
       status.textContent = "Status: " + text;
-    }
-
-    function maybeShowEncryptNow() {
-      if (!encryptBtn) return;
-      encryptBtn.style.display = (pwd.value && el.value && currentState === "plain") ? "inline-block" : "none";
     }
 
     async function hashKey(input) {
@@ -255,42 +250,45 @@
       }
     }
 
-    pwd.addEventListener("input", maybeShowEncryptNow);
-
     el.addEventListener("input", () => {
       if (isLocked) return;
-      maybeShowEncryptNow();
-      clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(async () => {
-        const text = el.value;
-        const pass = pwd.value;
-        if (pass && currentState !== "encrypted") {
-          const encrypted = await encryptNote(text, pass);
-          localStorage.setItem(storageKey, encrypted);
-          currentState = "encrypted";
-          updateStatus("Encrypted");
-        } else {
-          localStorage.setItem(storageKey, text);
-          currentState = "plain";
-          updateStatus("Saved");
-        }
-      }, 500);
+      localStorage.setItem(storageKey, el.value);
+      currentState = "plain";
+      updateStatus("Saved");
     });
 
     unlockBtn.addEventListener("click", async () => {
       const raw = localStorage.getItem(storageKey);
       if (!pwd.value || !raw) return;
-      const data = JSON.parse(raw);
-      if (!data.encrypted) return;
-      const decrypted = await decryptNote(data, pwd.value);
-      if (decrypted) {
-        el.value = decrypted;
-        currentState = "decrypted";
-        isLocked = false;
-        el.removeAttribute("disabled");
-        lockBanner.style.display = "none";
-        updateStatus("Decrypted");
+      try {
+        const data = JSON.parse(raw);
+        if (!data.encrypted) return;
+        const decrypted = await decryptNote(data, pwd.value);
+        if (decrypted) {
+          el.value = decrypted;
+          currentState = "plain";
+          isLocked = false;
+          el.removeAttribute("disabled");
+          localStorage.setItem(storageKey, decrypted);
+          updateStatus("Unlocked");
+          lockBanner.style.display = "none";
+        }
+      } catch {
+        updateStatus("Failed to unlock");
       }
+    });
+
+    lockBtn.addEventListener("click", async () => {
+      const text = el.value;
+      const pass = pwd.value;
+      if (!pass || !text) return;
+      const encrypted = await encryptNote(text, pass);
+      localStorage.setItem(storageKey, encrypted);
+      currentState = "encrypted";
+      isLocked = true;
+      el.setAttribute("disabled", true);
+      updateStatus("Locked");
+      lockBanner.style.display = "block";
     });
 
     clearBtn.addEventListener("click", () => {
@@ -324,6 +322,7 @@
         updateStatus("Ready");
         return;
       }
+
       try {
         const data = JSON.parse(raw);
         if (data.encrypted) {
@@ -340,6 +339,7 @@
         }
       } catch {
         el.value = raw;
+        currentState = "plain";
         el.removeAttribute("disabled");
         updateStatus("Loaded");
       }
