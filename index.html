@@ -67,7 +67,7 @@
     }
 
     textarea {
-      height: 60vh;
+      height: 65vh;
       resize: none;
       line-height: 1.5;
     }
@@ -91,7 +91,7 @@
       flex-wrap: wrap;
       gap: 0.5em;
       align-items: center;
-      margin-bottom: 1em;
+      margin-bottom: 0.5em;
     }
 
     .status {
@@ -111,23 +111,31 @@
 
     footer {
       margin-top: auto;
-      padding-top: 2em;
       font-size: 0.8em;
-      text-align: center;
       color: var(--subtle);
+      text-align: center;
+    }
+
+    .footer-top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5em;
+      border-top: 1px solid var(--border);
+      padding-top: 1em;
+      margin-top: 2em;
     }
 
     .guide {
-      margin-top: 2em;
+      margin-top: 1.5em;
       text-align: left;
-      font-size: 0.8em;
+      font-size: 0.75em;
       color: var(--subtle);
       line-height: 1.5;
     }
 
     .theme-toggle {
-      display: inline-block;
-      margin-top: 1em;
       font-size: 0.85em;
       border: 1px solid var(--border);
       background: none;
@@ -144,6 +152,11 @@
       .controls {
         flex-direction: column;
         align-items: stretch;
+      }
+
+      .footer-top {
+        flex-direction: column;
+        align-items: center;
       }
 
       .status {
@@ -172,17 +185,17 @@
   <div class="status" id="status">Status: Ready</div>
 
   <footer>
-    Stored only in this browser. Private by design.<br>
-    <small>nox v0.15.5</small><br>
-    <button class="theme-toggle" id="themeToggle">Dark</button>
+    <div class="footer-top">
+      <span>nox v0.15.6 — Stored only in this browser</span>
+      <button class="theme-toggle" id="themeToggle">Dark</button>
+    </div>
 
     <div class="guide">
-      <strong>How it works:</strong><br>
-      Create a note at any custom URL — for example:<br>
-      <code>nox.directory/my-thoughts</code><br><br>
-      Your note is stored only in your browser’s local storage.<br>
-      Add a password to encrypt your note. Unlock it anytime on the same device.<br>
-      No accounts, no sync, no cloud.
+      <strong>How to use:</strong><br>
+      Create a note at any URL you want — for example:<br>
+      <code>nox.directory/my-thoughts</code><br>
+      Notes are saved locally in your browser only.<br>
+      Add a password to encrypt. Unlock anytime on the same device.
     </div>
   </footer>
 
