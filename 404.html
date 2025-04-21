@@ -92,9 +92,9 @@
     }
 
     .status {
-      flex-grow: 1;
       font-size: 0.85em;
       color: var(--subtle);
+      margin-bottom: 1em;
       text-align: right;
     }
 
@@ -135,20 +135,20 @@
 </head>
 <body>
   <h1>Note: <code id="note-id"></code></h1>
+  <div class="status" id="status">Status: Ready</div>
+
+  <textarea id="note" placeholder="Start typing..." disabled></textarea>
 
   <div class="controls">
     <input type="password" id="password" placeholder="Enter password (optional)">
     <button id="unlock">Unlock</button>
     <button id="encryptNow" style="display:none;">Encrypt Now</button>
     <button id="clear">Forget</button>
-    <span class="status" id="status">Status: Ready</span>
   </div>
-
-  <textarea id="note" placeholder="Start typing..." disabled></textarea>
 
   <footer>
     Stored only in this browser. Private by design.<br>
-    <small>nox v0.15.2</small><br>
+    <small>nox v0.15.3</small><br>
     <button class="theme-toggle" id="themeToggle">Dark</button>
   </footer>
 
