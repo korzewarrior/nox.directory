@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Private Notes</title>
+  <title>Private Note</title>
   <style>
     :root {
       font-family: 'Georgia', serif;
       font-size: 18px;
       --bg: #fefefe;
       --fg: #111;
-      --subtle: #999;
+      --subtle: #888;
       --field-bg: #fff;
     }
 
@@ -21,21 +21,26 @@
       --field-bg: #1a1a1a;
     }
 
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
-      padding: 3em 1em;
-      max-width: 700px;
-      margin-inline: auto;
+      padding: 2em 1em 4em;
       background: var(--bg);
       color: var(--fg);
       transition: background 0.3s ease, color 0.3s ease;
+      max-width: 800px;
+      margin-inline: auto;
     }
 
     h1 {
-      font-size: 1.2em;
+      font-size: 1em;
       font-weight: normal;
       color: var(--subtle);
       margin-bottom: 1em;
+      word-break: break-all;
     }
 
     textarea, input {
@@ -83,8 +88,8 @@
     }
 
     footer {
-      margin-top: 1.5em;
-      font-size: 0.85em;
+      margin-top: 2em;
+      font-size: 0.8em;
       color: var(--subtle);
       text-align: center;
     }
@@ -98,6 +103,24 @@
       border: none;
       color: var(--subtle);
       cursor: pointer;
+    }
+
+    @media (max-width: 500px) {
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .status {
+        text-align: left;
+      }
+
+      .theme-toggle {
+        position: static;
+        display: block;
+        margin-bottom: 1em;
+        text-align: right;
+      }
     }
   </style>
 </head>
@@ -116,7 +139,10 @@
 
   <textarea id="note" placeholder="Start typing..." disabled></textarea>
 
-  <footer>Saved only in this browser. Your secrets stay on your device. Encryption optional but recommended.</footer>
+  <footer>
+    Saved only in this browser. Encryption optional but recommended.<br>
+    <small>v0.13</small>
+  </footer>
 
   <script>
     const path = window.location.pathname;
@@ -215,8 +241,8 @@
           el.disabled = true;
           updateStatus("Locked (requires password)");
         } else {
-          currentState = "plain";
           el.value = data;
+          currentState = "plain";
           el.disabled = false;
           updateStatus("Unencrypted");
         }
@@ -227,6 +253,21 @@
         updateStatus("Unencrypted");
       }
     }
+
+    function maybeShowEncryptNow() {
+      if (
+        pwd.value &&
+        el.value &&
+        currentState !== "encrypted" &&
+        currentState !== "decrypted"
+      ) {
+        encryptBtn.style.display = "inline-block";
+      } else {
+        encryptBtn.style.display = "none";
+      }
+    }
+
+    pwd.addEventListener("input", maybeShowEncryptNow);
 
     unlockBtn.addEventListener("click", async () => {
       const pass = pwd.value;
@@ -264,9 +305,7 @@
     });
 
     el.addEventListener("input", () => {
-      if (pwd.value && currentState !== "encrypted" && currentState !== "decrypted") {
-        encryptBtn.style.display = "inline-block";
-      }
+      maybeShowEncryptNow();
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(async () => {
         const text = el.value;
